@@ -43,9 +43,12 @@
     <MASM Include="blur.asm">
       <Filter>Source Files</Filter>
     </MASM>
+    <MASM Include="vertical.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\ConsoleApplication1\blurASM.def">
+    <None Include="blurASM.def">
       <Filter>Source Files</Filter>
     </None>
   </ItemGroup>

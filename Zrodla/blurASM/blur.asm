@@ -2,7 +2,7 @@
 ;(byte * source, = RCX 
 ;byte * target = RDX
 ;int width, = r8
- ;int height); = r9
+;int height); = r9
 
 PUBLIC blur
 EXTERN puts:PROC
@@ -12,17 +12,20 @@ align 16
 RCPDIVIDER real4 0.0, 0.0, 0.0, 0.0
 TARGET DQ 0.0 
 SOURCE DQ 0.0
-
-
-
+BLUR_SIZE dq 15
+BORDER DQ 0.0
+OFFSET_COUNTER DQ 0.0
+OFFSET_FINISH DQ 0.0
 .code
 
 blur proc
 	mov TARGET, rdx; save the rdx value - target array pointer
 	mov SOURCE, rcx; save the rcx value - source array pointer
+	
+	;pop rax
 	 mov r10, 0 ;array offset pointer
 	 mov r11, 0; average array offset pointer
-	 mov r12w, 3; r12 - neighbourhood counter
+	
 	 mov r13, r8; width to pixel counter
 	 mov rax, r9; height to accumulator
 	 mul r13; making r13 pixel counter
@@ -30,11 +33,22 @@ blur proc
 	mov r14, 0; iterartion counter
 	mov r15, 16; size of data in xmm in bytes
 	
-	 mov eax, 3
-	 cvtsi2ss xmm0,eax
+	 mov rax, BLUR_SIZE
+	 cvtsi2ss xmm0,rax
 	 shufps xmm0, xmm0, 0 ;move to all 4 dwords
 	 rcpps xmm0, xmm0 ;recip values in xmm0
 	 movaps [RCPDIVIDER], xmm0 ;move to the memory
+
+	 ;calculate border
+	 mov rax, BLUR_SIZE
+	 mov rcx, 2
+	 div rcx
+	 mov BORDER, rax
+
+	 ;calculate offset counter
+	 xor r11, r11; zero offset counter
+sub r11, BORDER; offset counter = -(BLUR_SIZE/2)
+mov OFFSET_COUNTER, r11; move to the memory
 
 pixelLoop:
 ;loop by all pixels in bitmap (BGR0)	 
@@ -47,35 +61,42 @@ pixelLoop:
  mov rcx, r8; move divisor
  div rcx; dividing, rax = row, rdx = column
 
- cmp rdx, 0;if column = 0 
- je nextPixel
+ cmp rdx, BORDER;column - BORDER
+ jl nextPixelRW
  inc rdx
- cmp rdx, r8; if column = width
- je nextPixel
+ mov rax, r8
+ sub rax, BORDER
+ cmp rdx, rax; if column > width - BORDER 
+ jg nextPixelRW
+
+ ;calculate offset finish
+ mov rax, BORDER
+ inc rax
+ mov OFFSET_FINISH, rax
  
+ mov r12, OFFSET_COUNTER
    
-mov r11, -1; initialize neigbourhood counter
-
-
-mov r15, r10; neigbourhood offset = array offset
-sub r15,16;starting from one pixel to the left
-
-
 ;loop computing the neigbour average of BRG values	
 avgloop:
 
+;compute offset
+	mov r15,r10
+	mov r11,r12
+	mov rax, 16
+	mul r11;
+	mov r11, rax
+	add r15, r11; add offset sum to neigbourhood offset
+
 	
-	
-	
-	;imul r15, r11; 
 	pxor xmm1,xmm1 ; zero the xmm1 register -> tmp sum
 	mov rcx, SOURCE
 	addps xmm1, xmmword ptr[rcx+r15] ; read 16 bytes of data to tmp sum
-	mulps xmm1,RCPDIVIDER ;mulityply tmp sum of  by 1/3	
+	mulps xmm1,RCPDIVIDER ;mulityply tmp sum by 1/blur_size	
 	addps xmm0, xmm1; add value of tmpsum to average sum
-	add r15, 16
-	dec r12w
-	jnz avgloop
+	
+	inc r12
+	cmp r12, OFFSET_FINISH
+	jne avgloop
 
 nextPixel:
 mov rdx, TARGET
@@ -86,7 +107,24 @@ mov r12w, 3; move 3 to neigbourhood counter
 inc r14; increment iterartion counter
 dec r13; decrement pixel counter
 jnz pixelLoop ; if not zero
+
+nextPixelRW:
+pxor xmm1,xmm1 ; zero the xmm1 register -> tmp sum
+mov rcx, SOURCE
+
+addps xmm1, xmmword ptr[rcx+r10] ; read 16 bytes of data to tmp sum
+mov rdx, TARGET
+movapd xmmword ptr[rdx+r10],xmm1 ; move result to the result array
+
+
+add r10, 16 ;move 16 bytes in array
+;mov r11, 0; ; zero the r11 register
+mov r12w, 3; move 3 to neigbourhood counter
+inc r14; increment iterartion counter
+dec r13; decrement pixel counter
+jnz pixelLoop ; if not zero
 ret	
+	
 	
 blur endp
 

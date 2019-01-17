@@ -1,0 +1,4 @@
+LIBRARY  blurASM
+
+EXPORTS blur
+vertical
